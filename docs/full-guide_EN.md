@@ -440,6 +440,10 @@ crontab -e
 ```
 
 > Note: Scheduled mode reloads the saved `STOCK_LIST` before each run. If you also pass `--stocks`, it will not pin future scheduled executions to the startup snapshot; use a normal one-off run when you want to analyze a temporary stock list.
+> Note: Resume fetch and `--dry-run` share the same "latest reusable trading day" resolver instead of using the server's natural date directly.
+> Note: The resolver uses each market's local timezone: A-shares use `Asia/Shanghai`, Hong Kong stocks use `Asia/Hong_Kong`, and US stocks use `America/New_York`.
+> Note: On non-trading days (weekends or holidays), the system falls back to the most recent trading day when checking stored data; if that day's data already exists it skips the duplicate fetch, otherwise it continues the backfill.
+> Note: During market hours or before close, the reuse target is the previous completed trading day; after market close, the run skips only when the current trading day's data is already stored, otherwise it keeps fetching.
 
 ---
 
