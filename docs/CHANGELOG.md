@@ -7,11 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 > For user-friendly release highlights, see the [GitHub Releases](https://github.com/ZhuLinsen/daily_stock_analysis/releases) page.
 
+> Pending next release: fixes #877. `GeminiAnalyzer` no longer prints prompt or model-response body previews in default INFO logs; explicit debug mode now emits only redacted, single-line, truncated previews, with regression coverage added.
+
 ## [Unreleased]
-
-### 修复
-
-- 🔐 **LLM prompt/response 日志默认不再输出正文预览**（fixes #877）— `GeminiAnalyzer` 不再在常规 INFO 日志中输出 prompt 或模型回复正文；仅在显式调试模式下输出单行、脱敏且截断后的受控预览，降低提示词、回复内容及常见凭据片段落入日志采集与共享链路的暴露风险，并补充对应回归测试。
 
 ## [3.11.0] - 2026-03-27
 
