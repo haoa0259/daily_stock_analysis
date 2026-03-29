@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 
 - [修复] 🐳 **Docker WebUI 运行时优先复用预构建静态资源** — `prepare_webui_frontend_assets()` 现在会先检查镜像内已有的 `static/index.html` 是否可直接复用；当容器运行时不包含 `apps/dsa-web` 源码目录且未安装 `npm` 时，也不会误报“未找到前端项目，无法自动构建”，从而恢复 Docker 部署后的 WebUI 打开能力。
+- [改进] `STOCK_LIST` 现支持 `代码:备注` 手动股票名称语法；批量分析会优先使用本地备注并跳过对应股票的名称预取，减少慢速 `get_stock_name` 调用和 `股票xxxxxx` 占位名。
 
 ## [3.11.0] - 2026-03-27
 
