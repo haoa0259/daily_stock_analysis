@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 """
 ===================================
 A股自选股智能分析系统 - 主调度程序
@@ -21,37 +23,70 @@ A股自选股智能分析系统 - 主调度程序
 - 效率优先：关注筹码集中度好的股票
 - 买点偏好：缩量回踩 MA5/MA10 支撑
 """
-import os
-from src.config import setup_env
-setup_env()
-
-# 代理配置 - 通过 USE_PROXY 环境变量控制，默认关闭
-# GitHub Actions 环境自动跳过代理配置
-if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").lower() == "true":
-    # 本地开发环境，启用代理（可在 .env 中配置 PROXY_HOST 和 PROXY_PORT）
-    proxy_host = os.getenv("PROXY_HOST", "127.0.0.1")
-    proxy_port = os.getenv("PROXY_PORT", "10809")
-    proxy_url = f"http://{proxy_host}:{proxy_port}"
-    os.environ["http_proxy"] = proxy_url
-    os.environ["https_proxy"] = proxy_url
 
 import argparse
 import logging
+import os
 import sys
 import time
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from data_provider.base import canonical_stock_code
-from src.core.pipeline import StockAnalysisPipeline
-from src.core.market_review import run_market_review
-from src.webui_frontend import prepare_webui_frontend_assets
-from src.config import get_config, Config
-from src.logging_config import setup_logging
+if TYPE_CHECKING:
+    from src.config import Config
 
 
 logger = logging.getLogger(__name__)
+DEFAULT_LOG_PREFIX = "stock_analysis"
+DEFAULT_BOOTSTRAP_LOG_DIR = "logs"
+
+
+def get_config():
+    """Lazily import config loading to keep CLI bootstrap lightweight."""
+    from src.config import get_config as _get_config
+
+    return _get_config()
+
+
+def setup_logging(*args, **kwargs):
+    """Lazily import logging config to support early bootstrap logging."""
+    from src.logging_config import setup_logging as _setup_logging
+
+    return _setup_logging(*args, **kwargs)
+
+
+def _bootstrap_environment() -> None:
+    """Load .env and apply optional local proxy settings."""
+    from src.config import setup_env
+
+    setup_env()
+
+    # 代理配置 - 通过 USE_PROXY 环境变量控制，默认关闭
+    # GitHub Actions 环境自动跳过代理配置
+    if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").lower() == "true":
+        # 本地开发环境，启用代理（可在 .env 中配置 PROXY_HOST 和 PROXY_PORT）
+        proxy_host = os.getenv("PROXY_HOST", "127.0.0.1")
+        proxy_port = os.getenv("PROXY_PORT", "10809")
+        proxy_url = f"http://{proxy_host}:{proxy_port}"
+        os.environ["http_proxy"] = proxy_url
+        os.environ["https_proxy"] = proxy_url
+
+
+def _setup_bootstrap_logging(debug: bool = False) -> None:
+    """Initialize default file logging before config or heavy imports."""
+    setup_logging(
+        log_prefix=DEFAULT_LOG_PREFIX,
+        debug=debug,
+        log_dir=DEFAULT_BOOTSTRAP_LOG_DIR,
+    )
+
+
+def _prepare_webui_frontend_assets() -> bool:
+    """Lazily load WebUI asset preparation to avoid top-level heavy imports."""
+    from src.webui_frontend import prepare_webui_frontend_assets
+
+    return prepare_webui_frontend_assets()
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -266,6 +301,9 @@ def run_full_analysis(
     这是定时任务调用的主函数
     """
     try:
+        from src.core.market_review import run_market_review
+        from src.core.pipeline import StockAnalysisPipeline
+
         # Issue #529: Hot-reload STOCK_LIST from .env on each scheduled run
         if stock_codes is None:
             config.refresh_stock_list()
@@ -526,11 +564,28 @@ def main() -> int:
     # 解析命令行参数
     args = parse_arguments()
 
-    # 加载配置（在设置日志前加载，以获取日志目录）
-    config = get_config()
+    # 在配置加载前先初始化 bootstrap 日志，确保早期失败也能落盘
+    _setup_bootstrap_logging(debug=args.debug)
 
-    # 配置日志（输出到控制台和文件）
-    setup_logging(log_prefix="stock_analysis", debug=args.debug, log_dir=config.log_dir)
+    try:
+        _bootstrap_environment()
+    except Exception as exc:
+        logger.exception("初始化运行环境失败: %s", exc)
+        return 1
+
+    # 加载配置（在 bootstrap logging 之后执行，确保异常有日志）
+    try:
+        config = get_config()
+    except Exception as exc:
+        logger.exception("加载配置失败: %s", exc)
+        return 1
+
+    # 切换到配置指定的日志目录（正常路径保持原行为）
+    try:
+        setup_logging(log_prefix=DEFAULT_LOG_PREFIX, debug=args.debug, log_dir=config.log_dir)
+    except Exception as exc:
+        logger.exception("切换到配置日志目录失败: %s", exc)
+        return 1
 
     logger.info("=" * 60)
     logger.info("A股自选股智能分析系统 启动")
@@ -545,6 +600,8 @@ def main() -> int:
     # 解析股票列表（统一为大写 Issue #355）
     stock_codes = None
     if args.stocks:
+        from data_provider.base import canonical_stock_code
+
         stock_codes = [canonical_stock_code(c) for c in args.stocks.split(',') if (c or "").strip()]
         logger.info(f"使用命令行指定的股票列表: {stock_codes}")
 
@@ -570,7 +627,12 @@ def main() -> int:
 
     bot_clients_started = False
     if start_serve:
-        if not prepare_webui_frontend_assets():
+        frontend_assets_ready = False
+        try:
+            frontend_assets_ready = _prepare_webui_frontend_assets()
+        except Exception as exc:
+            logger.exception("准备 WebUI 前端资源失败: %s", exc)
+        if not frontend_assets_ready:
             logger.warning("前端静态资源未就绪，继续启动 FastAPI 服务（Web 页面可能不可用）")
         try:
             start_api_server(host=args.host, port=args.port, config=config)
