@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 
 - [修复] 🐳 **Docker WebUI 运行时优先复用预构建静态资源** — `prepare_webui_frontend_assets()` 现在会先检查镜像内已有的 `static/index.html` 是否可直接复用；当容器运行时不包含 `apps/dsa-web` 源码目录且未安装 `npm` 时，也不会误报“未找到前端项目，无法自动构建”，从而恢复 Docker 部署后的 WebUI 打开能力。
+- [新功能] 首批补齐台股个股分析支持：`2330.TW` 与 `STOCK_LIST`/CLI/API/Web 手动输入中的裸四位代码现在都会按台股识别并优先路由到 YFinance，新闻检索、Prompt 市场语境与交易日历也同步加入台股语义；台股仍复用现有搜索/LLM 主链路，A股专属增强能力保持 `not_supported`/fail-open。
 
 ## [3.11.0] - 2026-03-27
 
