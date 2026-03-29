@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 
 - [修复] 🐳 **Docker WebUI 运行时优先复用预构建静态资源** — `prepare_webui_frontend_assets()` 现在会先检查镜像内已有的 `static/index.html` 是否可直接复用；当容器运行时不包含 `apps/dsa-web` 源码目录且未安装 `npm` 时，也不会误报“未找到前端项目，无法自动构建”，从而恢复 Docker 部署后的 WebUI 打开能力。
+- [修复] `LLM_CHANNELS` 现在会在常见 provider 渠道缺少 `LLM_{NAME}_API_KEY(S)` 时，安全回退读取匹配的 legacy Secrets（如 `DEEPSEEK_API_KEY`、`AIHUBMIX_KEY`、`OPENAI_API_KEY`、`GEMINI_API_KEY`、`ANTHROPIC_API_KEY`），让 GitHub Actions 可继续使用默认 `.env` 的非敏感渠道结构。
+- [文档] 更新中英文 LLM 配置指南与 FAQ，补充 GitHub Actions 下渠道模式复用 legacy Secrets 的用法，并明确自定义渠道仍建议使用 `LITELLM_CONFIG` + `LITELLM_CONFIG_YAML`。
 
 ## [3.11.0] - 2026-03-27
 
