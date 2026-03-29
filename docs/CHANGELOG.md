@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 
 - [修复] 🐳 **Docker WebUI 运行时优先复用预构建静态资源** — `prepare_webui_frontend_assets()` 现在会先检查镜像内已有的 `static/index.html` 是否可直接复用；当容器运行时不包含 `apps/dsa-web` 源码目录且未安装 `npm` 时，也不会误报“未找到前端项目，无法自动构建”，从而恢复 Docker 部署后的 WebUI 打开能力。
+- [修复] 每日分析主流程新增总时长软预算保护；接近 `DAILY_RUN_SOFT_TIMEOUT_SECONDS` 上限时会停止启动剩余股票分析并跳过大盘复盘，避免 GitHub Actions 在 30 分钟上限前直接取消整次任务。
 
 ## [3.11.0] - 2026-03-27
 
