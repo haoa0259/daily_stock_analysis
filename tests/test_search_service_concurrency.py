@@ -70,6 +70,36 @@ class SearchServiceConcurrencyTestCase(unittest.TestCase):
     def tearDown(self) -> None:
         reset_search_service()
 
+    def test_get_cached_or_reserve_prefers_cached_response(self):
+        service = SearchService(
+            searxng_public_instances_enabled=False,
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+        cache_key = "cached-query|3|3"
+        response = SearchResponse(
+            query="cached-query",
+            results=[
+                SearchResult(
+                    title="cached-news",
+                    snippet="snippet",
+                    url="https://example.com/cached-news",
+                    source="example.com",
+                    published_date=datetime.now().date().isoformat(),
+                )
+            ],
+            provider="Cache",
+            success=True,
+        )
+        service._put_cache(cache_key, response)
+
+        cached, owner, event = service._get_cached_or_reserve(cache_key)
+
+        self.assertIs(cached, response)
+        self.assertFalse(owner)
+        self.assertIsNone(event)
+        self.assertNotIn(cache_key, service._cache_inflight)
+
     def test_provider_key_rotation_is_serialized(self):
         provider = _DummyProvider(["key-1", "key-2"])
         provider._key_cycle = _ThreadUnsafeCycle(["key-1", "key-2"])
@@ -153,6 +183,47 @@ class SearchServiceConcurrencyTestCase(unittest.TestCase):
         for response in responses:
             self.assertTrue(response.success)
             self.assertEqual([item.title for item in response.results], ["fresh-news"])
+
+    def test_search_stock_news_rechecks_cache_after_wait_before_provider_search(self):
+        service = SearchService(
+            searxng_public_instances_enabled=False,
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+        search_days = service._effective_news_window_days()
+        cache_key = service._cache_key("贵州茅台 600519 股票 最新消息", 3, search_days)
+        cached_response = SearchResponse(
+            query="贵州茅台 600519 股票 最新消息",
+            results=[
+                SearchResult(
+                    title="cached-after-wait",
+                    snippet="snippet",
+                    url="https://example.com/cached-after-wait",
+                    source="example.com",
+                    published_date=datetime.now().date().isoformat(),
+                )
+            ],
+            provider="Cache",
+            success=True,
+        )
+        service._cache_inflight[cache_key] = threading.Event()
+        provider = SimpleNamespace(
+            is_available=True,
+            name="MockProvider",
+            search=MagicMock(side_effect=AssertionError("provider search should not run after cache fills")),
+        )
+        service._providers = [provider]
+
+        def wait_for_cached(key, _event):
+            self.assertEqual(key, cache_key)
+            service._put_cache(cache_key, cached_response)
+            return None
+
+        with patch.object(service, "_wait_for_cached", side_effect=wait_for_cached):
+            response = service.search_stock_news("600519", "贵州茅台", max_results=3)
+
+        self.assertIs(response, cached_response)
+        provider.search.assert_not_called()
 
     def test_get_search_service_initializes_singleton_once(self):
         reset_search_service()

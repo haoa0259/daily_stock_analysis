@@ -1813,14 +1813,21 @@ class SearchService:
         with self._cache_lock:
             return self._get_cached_locked(key)
 
-    def _reserve_cache_fill(self, key: str) -> Tuple[bool, threading.Event]:
+    def _get_cached_or_reserve(
+        self,
+        key: str,
+    ) -> Tuple[Optional['SearchResponse'], bool, Optional[threading.Event]]:
         with self._cache_lock:
+            cached = self._get_cached_locked(key)
+            if cached is not None:
+                return cached, False, None
+
             event = self._cache_inflight.get(key)
             if event is None:
                 event = threading.Event()
                 self._cache_inflight[key] = event
-                return True, event
-            return False, event
+                return None, True, event
+            return None, False, event
 
     def _release_cache_fill(self, key: str, event: threading.Event) -> None:
         with self._cache_lock:
@@ -2159,17 +2166,20 @@ class SearchService:
             provider_max_results,
         )
 
-        # Check cache first
         cache_key = self._cache_key(query, max_results, search_days)
-        cached = self._get_cached(cache_key)
+        cached, cache_owner, cache_event = self._get_cached_or_reserve(cache_key)
         if cached is not None:
             logger.info(f"使用缓存搜索结果: {stock_name}({stock_code})")
             return cached
-        cache_owner, cache_event = self._reserve_cache_fill(cache_key)
-        if not cache_owner:
+
+        if not cache_owner and cache_event is not None:
             cached = self._wait_for_cached(cache_key, cache_event)
             if cached is not None:
                 logger.info(f"使用并发填充后的缓存搜索结果: {stock_name}({stock_code})")
+                return cached
+            cached, cache_owner, cache_event = self._get_cached_or_reserve(cache_key)
+            if cached is not None:
+                logger.info(f"使用等待后命中的缓存搜索结果: {stock_name}({stock_code})")
                 return cached
 
         try:
@@ -2227,7 +2237,7 @@ class SearchService:
                 error_message="所有搜索引擎都不可用或搜索失败"
             )
         finally:
-            if cache_owner:
+            if cache_owner and cache_event is not None:
                 self._release_cache_fill(cache_key, cache_event)
     
     def search_stock_events(

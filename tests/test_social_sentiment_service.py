@@ -141,6 +141,24 @@ class TestFetchTrending(unittest.TestCase):
         for result in results:
             self.assertEqual(result, [{"ticker": "AAPL"}])
 
+    def test_waiter_fallback_uses_capped_wait_and_populates_cache(self):
+        inflight = MagicMock()
+        inflight.wait.return_value = False
+        self.svc._cache_inflight["x_trending"] = inflight
+        payload = {"trending": [{"ticker": "AAPL"}]}
+
+        with patch.object(self.svc, "_fetch_json", return_value=payload) as mock_fetch:
+            first = self.svc.fetch_x_trending()
+            second = self.svc.fetch_x_trending()
+
+        self.assertEqual(first, [{"ticker": "AAPL"}])
+        self.assertEqual(second, [{"ticker": "AAPL"}])
+        inflight.wait.assert_called_once_with(timeout=self.svc._cache_wait_timeout_seconds())
+        self.assertLess(self.svc._cache_wait_timeout_seconds(), self.svc._TRENDING_CACHE_TTL)
+        self.assertLessEqual(self.svc._cache_wait_timeout_seconds(), 30.0)
+        self.assertEqual(mock_fetch.call_count, 1)
+        self.assertEqual(self.svc._cache["x_trending"][1], payload)
+
 
 class TestGetSocialContext(unittest.TestCase):
     """Tests for get_social_context (main entry point)."""

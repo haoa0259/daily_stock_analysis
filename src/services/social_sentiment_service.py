@@ -35,6 +35,8 @@ _TRANSIENT_EXCEPTIONS = (
 )
 
 _REQUEST_TIMEOUT = 8  # seconds
+_REQUEST_RETRY_ATTEMPTS = 2
+_REQUEST_RETRY_WAIT_CAP = 5  # wait_exponential(..., max=5)
 
 
 @retry(
@@ -100,6 +102,11 @@ class SocialSentimentService:
             logger.warning("Social sentiment API %s unexpected error: %s", url, e)
         return None
 
+    @classmethod
+    def _cache_wait_timeout_seconds(cls) -> float:
+        request_budget = (_REQUEST_TIMEOUT * _REQUEST_RETRY_ATTEMPTS) + _REQUEST_RETRY_WAIT_CAP
+        return max(1.0, min(float(cls._TRENDING_CACHE_TTL), float(request_budget), 30.0))
+
     def _fetch_cached(self, cache_key: str, url: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
         """Fetch with simple TTL cache (for trending endpoints)."""
         now = time.monotonic()
@@ -116,13 +123,18 @@ class SocialSentimentService:
                 owner = False
 
         if not owner:
-            inflight.wait(timeout=max(1.0, float(self._TRENDING_CACHE_TTL)))
+            inflight.wait(timeout=self._cache_wait_timeout_seconds())
             now = time.monotonic()
             with self._cache_lock:
                 cached = self._cache.get(cache_key)
                 if cached and (now - cached[0]) < self._TRENDING_CACHE_TTL:
                     return cached[1]
-            return self._fetch_json(url, params)
+
+            data = self._fetch_json(url, params)
+            if data is not None:
+                with self._cache_lock:
+                    self._cache[cache_key] = (time.monotonic(), data)
+            return data
 
         try:
             data = self._fetch_json(url, params)
