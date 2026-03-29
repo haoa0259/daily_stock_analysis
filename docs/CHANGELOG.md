@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->
 
 - [修复] 🐳 **Docker WebUI 运行时优先复用预构建静态资源** — `prepare_webui_frontend_assets()` 现在会先检查镜像内已有的 `static/index.html` 是否可直接复用；当容器运行时不包含 `apps/dsa-web` 源码目录且未安装 `npm` 时，也不会误报“未找到前端项目，无法自动构建”，从而恢复 Docker 部署后的 WebUI 打开能力。
-- [修复] 飞书自定义机器人启用签名校验时，`FeishuSender` 现在会优先使用独立的 `FEISHU_WEBHOOK_SIGNING_SECRET` 补充 `timestamp` 和 `sign`，并保留 `FEISHU_APP_SECRET` 在飞书应用场景的语义；若未配置独立签名密钥会回退使用应用 Secret 兼容旧配置。
+- [修复] 飞书自定义机器人启用签名校验时，`FeishuSender` 会使用独立的 `FEISHU_WEBHOOK_SIGNING_SECRET` 补充 `timestamp` 和 `sign`；未配置该密钥时保持不签名，避免影响 `FEISHU_APP_SECRET` 场景。
 
 ## [3.11.0] - 2026-03-27
 
