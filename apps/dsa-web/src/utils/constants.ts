@@ -1,7 +1,7 @@
 const configuredApiBaseUrl = import.meta.env.VITE_API_URL?.trim();
 
-declare const __APP_PACKAGE_VERSION__: string;
-declare const __APP_BUILD_TIME__: string;
+declare const __APP_PACKAGE_VERSION__: string | undefined;
+declare const __APP_BUILD_TIME__: string | undefined;
 
 const PLACEHOLDER_WEB_VERSION = '0.0.0';
 const UNKNOWN_BUILD_TIME = '未提供';
@@ -63,7 +63,7 @@ export function resolveWebBuildInfo({
   const rawVersion = packageVersion?.trim() || PLACEHOLDER_WEB_VERSION;
   const buildTime = normalizeBuildTimestamp(buildTimestamp);
   const buildId = createBuildIdentifier(buildTime);
-  const isFallbackVersion = !rawVersion || rawVersion === PLACEHOLDER_WEB_VERSION;
+  const isFallbackVersion = rawVersion === PLACEHOLDER_WEB_VERSION;
 
   return {
     version: isFallbackVersion ? buildId : rawVersion,
